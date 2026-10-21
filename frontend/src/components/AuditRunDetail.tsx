@@ -17,7 +17,6 @@ export function AuditRunDetail() {
     enabled: !!id,
   });
 
-
   if (runLoading) {
     return (
       <div className="flex items-center justify-center h-64">

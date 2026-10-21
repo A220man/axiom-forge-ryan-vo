@@ -1,11 +1,13 @@
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.main import create_app
-from app.core.database import Base, engine, async_session_maker
-from app.models import Fixture, ProviderConfig, ProviderType
+from app.core.database import Base
+from app.models import Fixture, ProviderConfig, ProviderType, AuditRun, AuditRunStatus
 from app.services.audit_engine import (
     INSPECTIONS,
     SUITE_INSPECTIONS,
@@ -18,25 +20,19 @@ from app.services.audit_engine import (
 )
 
 
-@pytest_asyncio.fixture(scope="function")
-async def test_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
-
 @pytest_asyncio.fixture
-async def session(test_db):
-    async with async_session_maker() as session:
+async def test_session(test_engine):
+    async_session = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
         yield session
+        await session.rollback()
+import uuid
 
 
 @pytest_asyncio.fixture
-async def sample_fixture(session: AsyncSession):
+async def sample_fixture(test_session: AsyncSession):
     fixture = Fixture(
-        name="Test Fixture",
+        name=f"Test Fixture {uuid.uuid4().hex[:8]}",
         description="A test fixture",
         content={
             "metadata": {"name": "test", "version": "1.0"},
@@ -46,23 +42,21 @@ async def sample_fixture(session: AsyncSession):
         },
         schema_version="1.0",
     )
-    session.add(fixture)
-    await session.commit()
-    await session.refresh(fixture)
+    test_session.add(fixture)
+    await test_session.commit()
+    await test_session.refresh(fixture)
     return fixture
-
-
 @pytest_asyncio.fixture
-async def sample_provider(session: AsyncSession):
+async def sample_provider(test_session: AsyncSession):
     provider = ProviderConfig(
         name="Mock Provider",
         provider_type=ProviderType.MOCK,
         model="mock-model",
         is_active=True,
     )
-    session.add(provider)
-    await session.commit()
-    await session.refresh(provider)
+    test_session.add(provider)
+    await test_session.commit()
+    await test_session.refresh(provider)
     return provider
 
 
@@ -230,9 +224,10 @@ class TestAuditRunAPI:
         response = await client.post(f"/audit-runs/{run_id}/execute")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "running"
+        # In sync mode, status will be completed; in async mode, it will be running
+        assert data["status"] in ("running", "completed")
 
-        # Wait for background task to complete
+        # Wait for background task to complete (if async mode)
         import asyncio
         for _ in range(50):
             await asyncio.sleep(0.1)
@@ -309,7 +304,13 @@ class TestFixtureAPI:
     async def test_update_fixture(self, client, sample_fixture):
         response = await client.patch(
             f"/fixtures/{sample_fixture.id}",
-            json={"name": "Updated Name"},
+            json={
+                "name": "Updated Name",
+                "content": {
+                    "metadata": {"name": "updated", "version": "2.0"},
+                    "tests": [{"id": "test2", "prompt": "New prompt", "expected": "New response"}],
+                },
+            },
         )
         assert response.status_code == 200
         data = response.json()
