@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     # Audit
     default_suite: str = "essential"
     audit_timeout_seconds: int = 120
-
+    sync_audit_execution: bool = False
 
 @lru_cache
 def get_settings() -> Settings:

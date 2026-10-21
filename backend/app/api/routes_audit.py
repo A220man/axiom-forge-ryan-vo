@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.models import AuditRun, AuditRunStatus, Fixture, ProviderConfig
 from app.schemas import (
@@ -140,15 +141,40 @@ async def execute_audit_run_endpoint(
     run.started_at = datetime.now(timezone.utc)
     await session.flush()
 
-    background_tasks.add_task(run_audit_background, run_id, fixture, provider)
+    settings = get_settings()
+    if settings.sync_audit_execution:
+        # Synchronous execution for testing
+        try:
+            results = await execute_audit_run(run, fixture, provider)
+            run.status = AuditRunStatus.COMPLETED
+            run.completed_at = datetime.now(timezone.utc)
+            run.results = results.model_dump()
+        except Exception as e:
+            run.status = AuditRunStatus.FAILED
+            run.completed_at = datetime.now(timezone.utc)
+            run.error_message = str(e)
+        run.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+    else:
+        # Get the session factory from the current session's bind
+        from app.core.database import async_session_maker
+        background_tasks.add_task(run_audit_background, run_id, fixture, provider, async_session_maker)
 
     return AuditRunResponse.model_validate(run)
 
 
-async def run_audit_background(run_id: str, fixture: Fixture, provider: ProviderConfig):
-    from app.core.database import async_session_maker
+async def run_audit_background(
+    run_id: str,
+    fixture: Fixture,
+    provider: ProviderConfig,
+    session_factory=None,
+):
+    """Run audit in background with optional session factory override for testing."""
+    from app.core.database import async_session_maker as default_session_maker
 
-    async with async_session_maker() as session:
+    session_maker = session_factory or default_session_maker
+
+    async with session_maker() as session:
         run = await session.get(AuditRun, run_id)
         if not run:
             return

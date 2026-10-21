@@ -407,7 +407,7 @@ function ProviderModal({
                 className="form-input"
                 defaultValue={provider?.model}
                 required
-                placeholder="e.g., gpt-4o, claude-3-5-sonnet-latest, gemini-1.5-pro"
+                placeholder="gpt-4o, claude-3-5-sonnet, gemini-1.5-pro"
               />
             </div>
             <div className="form-group col-span-2">
@@ -418,11 +418,11 @@ function ProviderModal({
                 name="base_url"
                 className="form-input"
                 defaultValue={provider?.base_url ?? ''}
-                placeholder="https://api.openai.com/v1 (for OpenAI-compatible)"
+                placeholder="https://api.openai.com/v1"
               />
             </div>
             <div className="form-group col-span-2">
-              <label htmlFor="provider-api-key-env" className="form-label">API Key Environment Variable (Optional)</label>
+              <label htmlFor="provider-api-key-env" className="form-label">API Key Env Var (Optional)</label>
               <input
                 type="text"
                 id="provider-api-key-env"
@@ -432,7 +432,7 @@ function ProviderModal({
                 placeholder="OPENAI_API_KEY"
               />
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                The environment variable name where the API key is stored on the server. Never enter the actual key here.
+                Server-side env var name for the API key. Never enter the actual key here.
               </p>
             </div>
             <div className="form-group">
