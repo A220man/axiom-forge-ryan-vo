@@ -318,6 +318,18 @@ class TestFixtureAPI:
         assert data["version"] == 2
 
     @pytest.mark.asyncio
+    async def test_update_fixture_invalid_content(self, client, sample_fixture):
+        response = await client.patch(
+            f"/fixtures/{sample_fixture.id}",
+            json={
+                "content": {"metadata": {}},  # missing tests
+            },
+        )
+        assert response.status_code == 400
+        data = response.json()
+        assert "must contain keys" in data["detail"]
+
+    @pytest.mark.asyncio
     async def test_delete_fixture(self, client, sample_fixture):
         response = await client.delete(f"/fixtures/{sample_fixture.id}")
         assert response.status_code == 204
