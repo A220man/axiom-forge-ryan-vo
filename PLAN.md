@@ -22,6 +22,10 @@ Acceptance:
 - Docker Compose with backend, frontend, Keycloak, persistent volumes
 - Backend and frontend tests pass
 
+Implementation: `backend/app/api/routes_fixture.py`, `backend/app/api/routes_audit.py`, `backend/app/api/routes_provider.py`, `backend/app/services/audit_engine.py`, `backend/tests/test_audit_engine.py`
+
+Tests: `backend/tests/test_audit_engine.py`
+
 ### fixture-management — Fixture CRUD and validation
 
 Status: planned

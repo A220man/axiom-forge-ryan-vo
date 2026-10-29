@@ -105,6 +105,12 @@ async def update_fixture(
     if fixture_data.content is not None:
         if not isinstance(fixture_data.content, dict):
             raise HTTPException(status_code=400, detail="Fixture content must be a JSON object")
+        required_keys = {"metadata", "tests"}
+        if not required_keys.issubset(fixture_data.content.keys()):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fixture content must contain keys: {required_keys}",
+            )
         fixture.content = fixture_data.content
         fixture.version += 1
     if fixture_data.schema_version is not None:
