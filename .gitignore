@@ -67,3 +67,10 @@ temp/
 # Backup
 *.bak
 *.backup
+*.pyc
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm

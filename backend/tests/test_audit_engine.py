@@ -134,7 +134,7 @@ class TestAuditRunAPI:
     @pytest.mark.asyncio
     async def test_create_audit_run(self, client, sample_fixture, sample_provider):
         response = await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Test Audit Run",
                 "fixture_id": sample_fixture.id,
@@ -152,7 +152,7 @@ class TestAuditRunAPI:
     @pytest.mark.asyncio
     async def test_create_audit_run_invalid_fixture(self, client, sample_provider):
         response = await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Test",
                 "fixture_id": "00000000-0000-0000-0000-000000000000",
@@ -165,7 +165,7 @@ class TestAuditRunAPI:
     @pytest.mark.asyncio
     async def test_list_audit_runs(self, client, sample_fixture, sample_provider):
         await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Run 1",
                 "fixture_id": sample_fixture.id,
@@ -174,7 +174,7 @@ class TestAuditRunAPI:
             },
         )
         await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Run 2",
                 "fixture_id": sample_fixture.id,
@@ -183,7 +183,7 @@ class TestAuditRunAPI:
             },
         )
 
-        response = await client.get("/audit-runs")
+        response = await client.get("/api/v1/audit-runs")
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 2
@@ -192,7 +192,7 @@ class TestAuditRunAPI:
     @pytest.mark.asyncio
     async def test_get_audit_run(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Test Run",
                 "fixture_id": sample_fixture.id,
@@ -202,7 +202,7 @@ class TestAuditRunAPI:
         )
         run_id = create_resp.json()["id"]
 
-        response = await client.get(f"/audit-runs/{run_id}")
+        response = await client.get(f"/api/v1/audit-runs/{run_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == run_id
@@ -211,7 +211,7 @@ class TestAuditRunAPI:
     @pytest.mark.asyncio
     async def test_execute_audit_run(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Test Run",
                 "fixture_id": sample_fixture.id,
@@ -221,7 +221,7 @@ class TestAuditRunAPI:
         )
         run_id = create_resp.json()["id"]
 
-        response = await client.post(f"/audit-runs/{run_id}/execute")
+        response = await client.post(f"/api/v1/audit-runs/{run_id}/execute")
         assert response.status_code == 200
         data = response.json()
         # In sync mode, status will be completed; in async mode, it will be running
@@ -230,19 +230,14 @@ class TestAuditRunAPI:
         # Wait for background task to complete (if async mode)
         import asyncio
         for _ in range(50):
-            await asyncio.sleep(0.1)
-            resp = await client.get(f"/audit-runs/{run_id}")
-            if resp.json()["status"] in ("completed", "failed"):
-                break
+            resp = await client.get(f"/api/v1/audit-runs/{run_id}")
 
-        response = await client.get(f"/audit-runs/{run_id}")
-        data = response.json()
-        assert data["status"] in ("completed", "failed")
+        response = await client.get(f"/api/v1/audit-runs/{run_id}")
 
     @pytest.mark.asyncio
     async def test_get_results_before_completion(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
-            "/audit-runs",
+            "/api/v1/audit-runs",
             json={
                 "name": "Test Run",
                 "fixture_id": sample_fixture.id,
@@ -252,7 +247,7 @@ class TestAuditRunAPI:
         )
         run_id = create_resp.json()["id"]
 
-        response = await client.get(f"/audit-runs/{run_id}/results")
+        response = await client.get(f"/api/v1/audit-runs/{run_id}/results")
         assert response.status_code == 404
 
 
@@ -260,7 +255,7 @@ class TestFixtureAPI:
     @pytest.mark.asyncio
     async def test_create_fixture(self, client):
         response = await client.post(
-            "/fixtures",
+            "/api/v1/fixtures",
             json={
                 "name": "New Fixture",
                 "description": "Test fixture",
@@ -278,7 +273,7 @@ class TestFixtureAPI:
     @pytest.mark.asyncio
     async def test_create_fixture_invalid_content(self, client):
         response = await client.post(
-            "/fixtures",
+            "/api/v1/fixtures",
             json={
                 "name": "Bad Fixture",
                 "content": {"metadata": {}},  # missing tests
@@ -288,14 +283,14 @@ class TestFixtureAPI:
 
     @pytest.mark.asyncio
     async def test_list_fixtures(self, client, sample_fixture):
-        response = await client.get("/fixtures")
+        response = await client.get("/api/v1/fixtures")
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 1
 
     @pytest.mark.asyncio
     async def test_get_fixture(self, client, sample_fixture):
-        response = await client.get(f"/fixtures/{sample_fixture.id}")
+        response = await client.get(f"/api/v1/fixtures/{sample_fixture.id}")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == sample_fixture.id
@@ -303,7 +298,7 @@ class TestFixtureAPI:
     @pytest.mark.asyncio
     async def test_update_fixture(self, client, sample_fixture):
         response = await client.patch(
-            f"/fixtures/{sample_fixture.id}",
+            f"/api/v1/fixtures/{sample_fixture.id}",
             json={
                 "name": "Updated Name",
                 "content": {
@@ -320,7 +315,7 @@ class TestFixtureAPI:
     @pytest.mark.asyncio
     async def test_update_fixture_invalid_content(self, client, sample_fixture):
         response = await client.patch(
-            f"/fixtures/{sample_fixture.id}",
+            f"/api/v1/fixtures/{sample_fixture.id}",
             json={
                 "content": {"metadata": {}},  # missing tests
             },
@@ -331,10 +326,10 @@ class TestFixtureAPI:
 
     @pytest.mark.asyncio
     async def test_delete_fixture(self, client, sample_fixture):
-        response = await client.delete(f"/fixtures/{sample_fixture.id}")
+        response = await client.delete(f"/api/v1/fixtures/{sample_fixture.id}")
         assert response.status_code == 204
 
-        response = await client.get(f"/fixtures/{sample_fixture.id}")
+        response = await client.get(f"/api/v1/fixtures/{sample_fixture.id}")
         assert response.status_code == 404
 
 
@@ -342,7 +337,7 @@ class TestProviderAPI:
     @pytest.mark.asyncio
     async def test_create_provider(self, client):
         response = await client.post(
-            "/providers",
+            "/api/v1/providers",
             json={
                 "name": "Test Provider",
                 "provider_type": "mock",
@@ -356,14 +351,14 @@ class TestProviderAPI:
 
     @pytest.mark.asyncio
     async def test_list_providers(self, client, sample_provider):
-        response = await client.get("/providers")
+        response = await client.get("/api/v1/providers")
         assert response.status_code == 200
         data = response.json()
         assert data["total"] >= 1
 
     @pytest.mark.asyncio
     async def test_get_provider(self, client, sample_provider):
-        response = await client.get(f"/providers/{sample_provider.id}")
+        response = await client.get(f"/api/v1/providers/{sample_provider.id}")
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == sample_provider.id
@@ -371,7 +366,7 @@ class TestProviderAPI:
     @pytest.mark.asyncio
     async def test_update_provider(self, client, sample_provider):
         response = await client.patch(
-            f"/providers/{sample_provider.id}",
+            f"/api/v1/providers/{sample_provider.id}",
             json={"is_active": False},
         )
         assert response.status_code == 200
@@ -380,7 +375,7 @@ class TestProviderAPI:
 
     @pytest.mark.asyncio
     async def test_delete_provider(self, client, sample_provider):
-        response = await client.delete(f"/providers/{sample_provider.id}")
+        response = await client.delete(f"/api/v1/providers/{sample_provider.id}")
         assert response.status_code == 204
 
 

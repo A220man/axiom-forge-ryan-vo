@@ -27,8 +27,8 @@ ENV PATH=/home/appuser/.local/bin:$PATH
 COPY --chown=appuser:appuser backend/ ./backend/
 COPY --chown=appuser:appuser pyproject.toml ./
 
-USER appuser
-
+    RUN mkdir -p /app/backend/data
+    
 WORKDIR /app/backend
 
 EXPOSE 8000

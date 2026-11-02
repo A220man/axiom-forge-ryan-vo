@@ -10,7 +10,7 @@ skeleton-audit-run
 
 ### skeleton-audit-run — FastAPI/React skeleton with audit run creation and execution
 
-Status: in_progress
+Status: done
 
 Acceptance:
 - FastAPI backend starts and serves health endpoint
