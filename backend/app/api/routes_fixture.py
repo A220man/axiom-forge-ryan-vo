@@ -26,21 +26,16 @@ async def list_fixtures(
     session: AsyncSession = Depends(get_db_session),
 ):
     query = select(Fixture).order_by(Fixture.created_at.desc())
-    count_query = select(func.count(Fixture.id))
-
     if search:
         query = query.where(Fixture.name.ilike(f"%{search}%"))
-        count_query = count_query.where(Fixture.name.ilike(f"%{search}%"))
 
-    total_result = await session.execute(count_query)
-    total = total_result.scalar_one()
+    total_query = select(func.count()).select_from(query.subquery())
+    total = (await session.execute(total_query)).scalar()
 
-    query = query.offset((page - 1) * page_size).limit(page_size)
-    result = await session.execute(query)
-    fixtures = result.scalars().all()
+    items = (await session.execute(query.offset((page - 1) * page_size).limit(page_size))).scalars().all()
 
     return FixtureListResponse(
-        items=[FixtureResponse.model_validate(f) for f in fixtures],
+        items=[FixtureResponse.model_validate(item) for item in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -55,7 +50,6 @@ async def create_fixture(
     # Validate fixture content structure
     if not isinstance(fixture_data.content, dict):
         raise HTTPException(status_code=400, detail="Fixture content must be a JSON object")
-
     required_keys = {"metadata", "tests"}
     if not required_keys.issubset(fixture_data.content.keys()):
         raise HTTPException(
@@ -68,12 +62,10 @@ async def create_fixture(
         description=fixture_data.description,
         content=fixture_data.content,
         schema_version=fixture_data.schema_version,
-        version=1,
     )
     session.add(fixture)
-    await session.flush()
+    await session.commit()
     await session.refresh(fixture)
-
     return FixtureResponse.model_validate(fixture)
 
 
@@ -98,10 +90,13 @@ async def update_fixture(
     if not fixture:
         raise HTTPException(status_code=404, detail="Fixture not found")
 
+    updated = False
     if fixture_data.name is not None:
         fixture.name = fixture_data.name
+        updated = True
     if fixture_data.description is not None:
         fixture.description = fixture_data.description
+        updated = True
     if fixture_data.content is not None:
         if not isinstance(fixture_data.content, dict):
             raise HTTPException(status_code=400, detail="Fixture content must be a JSON object")
@@ -112,9 +107,13 @@ async def update_fixture(
                 detail=f"Fixture content must contain keys: {required_keys}",
             )
         fixture.content = fixture_data.content
-        fixture.version += 1
+        updated = True
     if fixture_data.schema_version is not None:
         fixture.schema_version = fixture_data.schema_version
+        updated = True
+
+    if updated:
+        fixture.version += 1
 
     from datetime import datetime, timezone
     fixture.updated_at = datetime.now(timezone.utc)
@@ -133,6 +132,5 @@ async def delete_fixture(
     fixture = await session.get(Fixture, fixture_id)
     if not fixture:
         raise HTTPException(status_code=404, detail="Fixture not found")
-
     await session.delete(fixture)
     await session.commit()

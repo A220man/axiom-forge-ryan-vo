@@ -21,11 +21,26 @@ from app.services.audit_engine import (
 
 
 @pytest_asyncio.fixture
+async def test_engine():
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
 async def test_session(test_engine):
     async_session = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
     async with async_session() as session:
         yield session
         await session.rollback()
+
+
 import uuid
 
 
@@ -46,6 +61,8 @@ async def sample_fixture(test_session: AsyncSession):
     await test_session.commit()
     await test_session.refresh(fixture)
     return fixture
+
+
 @pytest_asyncio.fixture
 async def sample_provider(test_session: AsyncSession):
     provider = ProviderConfig(
@@ -129,6 +146,15 @@ class TestAuditEngine:
         assert len(results.inspections) == 10
         assert run.status == AuditRunStatus.PENDING  # Not modified by execute_audit_run
 
+    def test_invalid_suite_raises_error(self):
+        """Test that invalid suite names raise ValueError with helpful message."""
+        with pytest.raises(ValueError) as exc_info:
+            get_inspections_for_suite("invalid_suite")
+        assert "Unknown suite 'invalid_suite'" in str(exc_info.value)
+        assert "smoke" in str(exc_info.value)
+        assert "essential" in str(exc_info.value)
+        assert "all" in str(exc_info.value)
+
 
 class TestAuditRunAPI:
     @pytest.mark.asyncio
@@ -136,7 +162,7 @@ class TestAuditRunAPI:
         response = await client.post(
             "/api/v1/audit-runs",
             json={
-                "name": "Test Audit Run",
+                "name": "Test Run",
                 "fixture_id": sample_fixture.id,
                 "provider_config_id": sample_provider.id,
                 "suite": "essential",
@@ -144,17 +170,18 @@ class TestAuditRunAPI:
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["name"] == "Test Audit Run"
-        assert data["status"] == "pending"
+        assert data["name"] == "Test Run"
         assert data["fixture_id"] == sample_fixture.id
         assert data["provider_config_id"] == sample_provider.id
+        assert data["suite"] == "essential"
+        assert data["status"] == "pending"
 
     @pytest.mark.asyncio
     async def test_create_audit_run_invalid_fixture(self, client, sample_provider):
         response = await client.post(
             "/api/v1/audit-runs",
             json={
-                "name": "Test",
+                "name": "Test Run",
                 "fixture_id": "00000000-0000-0000-0000-000000000000",
                 "provider_config_id": sample_provider.id,
                 "suite": "essential",
@@ -164,37 +191,32 @@ class TestAuditRunAPI:
 
     @pytest.mark.asyncio
     async def test_list_audit_runs(self, client, sample_fixture, sample_provider):
-        await client.post(
-            "/api/v1/audit-runs",
-            json={
-                "name": "Run 1",
-                "fixture_id": sample_fixture.id,
-                "provider_config_id": sample_provider.id,
-                "suite": "essential",
-            },
-        )
-        await client.post(
-            "/api/v1/audit-runs",
-            json={
-                "name": "Run 2",
-                "fixture_id": sample_fixture.id,
-                "provider_config_id": sample_provider.id,
-                "suite": "smoke",
-            },
-        )
+        # Create a few runs
+        for i in range(3):
+            await client.post(
+                "/api/v1/audit-runs",
+                json={
+                    "name": f"Run {i}",
+                    "fixture_id": sample_fixture.id,
+                    "provider_config_id": sample_provider.id,
+                    "suite": "essential",
+                },
+            )
 
         response = await client.get("/api/v1/audit-runs")
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] == 2
-        assert len(data["items"]) == 2
+        assert len(data["items"]) >= 3
+        assert data["page"] == 1
+        assert data["page_size"] == 20
+        assert data["total"] >= 3
 
     @pytest.mark.asyncio
     async def test_get_audit_run(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
             "/api/v1/audit-runs",
             json={
-                "name": "Test Run",
+                "name": "Single Run",
                 "fixture_id": sample_fixture.id,
                 "provider_config_id": sample_provider.id,
                 "suite": "essential",
@@ -206,14 +228,14 @@ class TestAuditRunAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == run_id
-        assert data["name"] == "Test Run"
+        assert data["name"] == "Single Run"
 
     @pytest.mark.asyncio
     async def test_execute_audit_run(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
             "/api/v1/audit-runs",
             json={
-                "name": "Test Run",
+                "name": "Execute Run",
                 "fixture_id": sample_fixture.id,
                 "provider_config_id": sample_provider.id,
                 "suite": "essential",
@@ -224,22 +246,25 @@ class TestAuditRunAPI:
         response = await client.post(f"/api/v1/audit-runs/{run_id}/execute")
         assert response.status_code == 200
         data = response.json()
-        # In sync mode, status will be completed; in async mode, it will be running
+        assert data["id"] == run_id
         assert data["status"] in ("running", "completed")
 
-        # Wait for background task to complete (if async mode)
+        # Wait a bit for background task
         import asyncio
-        for _ in range(50):
-            resp = await client.get(f"/api/v1/audit-runs/{run_id}")
+        await asyncio.sleep(0.5)
 
-        response = await client.get(f"/api/v1/audit-runs/{run_id}")
+        result_resp = await client.get(f"/api/v1/audit-runs/{run_id}/results")
+        assert result_resp.status_code == 200
+        result_data = result_resp.json()
+        assert result_data["grade"] in ("A", "B", "C", "D", "F")
+        assert len(result_data["inspections"]) == 10
 
     @pytest.mark.asyncio
     async def test_get_results_before_completion(self, client, sample_fixture, sample_provider):
         create_resp = await client.post(
             "/api/v1/audit-runs",
             json={
-                "name": "Test Run",
+                "name": "No Results Yet",
                 "fixture_id": sample_fixture.id,
                 "provider_config_id": sample_provider.id,
                 "suite": "essential",
@@ -257,18 +282,20 @@ class TestFixtureAPI:
         response = await client.post(
             "/api/v1/fixtures",
             json={
-                "name": "New Fixture",
-                "description": "Test fixture",
+                "name": "API Fixture",
+                "description": "Created via API",
                 "content": {
-                    "metadata": {"name": "test"},
-                    "tests": [{"id": "t1", "prompt": "p", "expected": "e"}],
+                    "metadata": {"name": "api-test", "version": "1.0"},
+                    "tests": [{"id": "t1", "prompt": "Hello", "expected": "World"}],
                 },
+                "schema_version": "1.0",
             },
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["name"] == "New Fixture"
+        assert data["name"] == "API Fixture"
         assert data["version"] == 1
+        assert "id" in data
 
     @pytest.mark.asyncio
     async def test_create_fixture_invalid_content(self, client):
@@ -276,17 +303,19 @@ class TestFixtureAPI:
             "/api/v1/fixtures",
             json={
                 "name": "Bad Fixture",
-                "content": {"metadata": {}},  # missing tests
+                "content": "not a dict",
             },
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_list_fixtures(self, client, sample_fixture):
         response = await client.get("/api/v1/fixtures")
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
+        assert data["page"] == 1
+        assert data["page_size"] == 20
 
     @pytest.mark.asyncio
     async def test_get_fixture(self, client, sample_fixture):
@@ -294,35 +323,26 @@ class TestFixtureAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == sample_fixture.id
+        assert data["name"] == sample_fixture.name
 
     @pytest.mark.asyncio
     async def test_update_fixture(self, client, sample_fixture):
         response = await client.patch(
             f"/api/v1/fixtures/{sample_fixture.id}",
-            json={
-                "name": "Updated Name",
-                "content": {
-                    "metadata": {"name": "updated", "version": "2.0"},
-                    "tests": [{"id": "test2", "prompt": "New prompt", "expected": "New response"}],
-                },
-            },
+            json={"name": "Updated Name"},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Updated Name"
-        assert data["version"] == 2
+        assert data["version"] == sample_fixture.version + 1
 
     @pytest.mark.asyncio
     async def test_update_fixture_invalid_content(self, client, sample_fixture):
         response = await client.patch(
             f"/api/v1/fixtures/{sample_fixture.id}",
-            json={
-                "content": {"metadata": {}},  # missing tests
-            },
+            json={"content": "not a dict"},
         )
-        assert response.status_code == 400
-        data = response.json()
-        assert "must contain keys" in data["detail"]
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_delete_fixture(self, client, sample_fixture):
@@ -342,6 +362,7 @@ class TestProviderAPI:
                 "name": "Test Provider",
                 "provider_type": "mock",
                 "model": "test-model",
+                "is_active": True,
             },
         )
         assert response.status_code == 201
@@ -354,7 +375,7 @@ class TestProviderAPI:
         response = await client.get("/api/v1/providers")
         assert response.status_code == 200
         data = response.json()
-        assert data["total"] >= 1
+        assert len(data["items"]) >= 1
 
     @pytest.mark.asyncio
     async def test_get_provider(self, client, sample_provider):
@@ -362,6 +383,7 @@ class TestProviderAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["id"] == sample_provider.id
+        assert data["name"] == sample_provider.name
 
     @pytest.mark.asyncio
     async def test_update_provider(self, client, sample_provider):

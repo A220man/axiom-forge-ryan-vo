@@ -168,8 +168,8 @@ Fixtures define the test scenarios for auditing:
 | `strategic` | 8 | Quick risk assessment |
 | `essential` | 10 | Default fast grade |
 | `core` | 32 | Full graded scorecard |
-| `extended` | 28 | Frontier risk signals |
-| `all` | 60 | Complete inspection set |
+| `extended` | 23 | Frontier risk signals |
+| `all` | 33 | Complete inspection set |
 
 ## Scoring
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.3.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
@@ -58,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD workflow with pytest, npm build/test, Docker builds
 
 ## [Unreleased]
+
+### Added
+- Suite validation in audit engine: `get_inspections_for_suite()` now raises `ValueError` for unknown suites with helpful message listing valid options
+- Test coverage for invalid suite validation (`test_invalid_suite_raises_error`)
+- Fixed fixture version increment: version now increments on any field update (name, description, content, schema_version), not just content changes
+- Fixed test `test_update_fixture` to pass with corrected version increment logic
+- Corrected README test suite counts: `extended` suite has 23 inspections (not 28), `all` suite has 33 inspections (not 60)
 
 ### Planned
 - Real LLM provider adapters (OpenAI, Anthropic, Gemini, Ollama)

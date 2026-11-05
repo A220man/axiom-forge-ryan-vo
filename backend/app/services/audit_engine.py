@@ -103,7 +103,10 @@ SUITE_INSPECTIONS = {
 
 
 def get_inspections_for_suite(suite: str) -> list[Inspection]:
-    ids = SUITE_INSPECTIONS.get(suite, SUITE_INSPECTIONS["essential"])
+    ids = SUITE_INSPECTIONS.get(suite)
+    if ids is None:
+        valid_suites = ", ".join(sorted(SUITE_INSPECTIONS.keys()))
+        raise ValueError(f"Unknown suite '{suite}'. Valid suites: {valid_suites}")
     return [INSPECTIONS[i] for i in ids if i in INSPECTIONS]
 
 
