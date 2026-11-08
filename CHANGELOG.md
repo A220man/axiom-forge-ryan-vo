@@ -1,8 +1,24 @@
 # Changelog
 
-## 1.4.0 — work-in-progress checkpoint
+## 1.5.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
+
+## 1.4.0 — work-in-progress checkpoint
+
+### Added
+- Audit results export as JSON and Markdown via new API endpoints:
+  - `GET /api/v1/audit-runs/{run_id}/results/export/json`
+  - `GET /api/v1/audit-runs/{run_id}/results/export/markdown`
+- Frontend export buttons in AuditRunDetail: Export JSON, Export Markdown, Copy JSON
+- Synchronous audit execution mode for testing (`SYNC_AUDIT_EXECUTION` env var)
+- Comprehensive Markdown report generation with run metadata, summary, pillar scores, mandatory minimums, and inspection details
+
+### Changed
+- Modified `execute_audit_run_endpoint` to support synchronous execution when `SYNC_AUDIT_EXECUTION=true`
+
+### Fixed
+- Test suite now passes with in-memory SQLite database for background audit execution
 
 ## 1.3.0 — work-in-progress checkpoint
 

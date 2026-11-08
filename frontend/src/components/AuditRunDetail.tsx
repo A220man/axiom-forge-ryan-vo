@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { ArrowLeft, ChevronDown, ChevronUp, Download, Copy, AlertTriangle, CheckCircle, XCircle, Clock, FileText, Play, RotateCw, Loader2 } from 'lucide-react';
 import { api } from '@/api/client';
 import { type AuditResults, type PillarScore, type InspectionResult } from '@/types/api';
@@ -43,6 +43,50 @@ export function AuditRunDetail() {
 
   const canExecute = run.status === 'pending' || run.status === 'failed';
   const isRunning = run.status === 'running';
+
+  const handleExportJson = useCallback(async () => {
+    if (!run.id) return;
+    try {
+      const blob = await api.exportResultsJson(run.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-run-${run.id}-results.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error('Failed to export JSON:', e);
+    }
+  }, [run.id]);
+
+  const handleExportMarkdown = useCallback(async () => {
+    if (!run.id) return;
+    try {
+      const blob = await api.exportResultsMarkdown(run.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `audit-run-${run.id}-results.md`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error('Failed to export Markdown:', e);
+    }
+  }, [run.id]);
+
+  const handleCopyResults = useCallback(async () => {
+    if (!run.results) return;
+    try {
+      const json = JSON.stringify(run.results, null, 2);
+      await navigator.clipboard.writeText(json);
+    } catch (e) {
+      console.error('Failed to copy results:', e);
+    }
+  }, [run.results]);
 
   return (
     <div className="space-y-6">
@@ -122,13 +166,17 @@ export function AuditRunDetail() {
             <div className="card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <h2 className="section-title">Inspection Details</h2>
               <div className="flex items-center gap-2">
-                <button className="btn btn-secondary btn-sm" onClick={handleExportResults}>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportJson}>
                   <Download className="h-4 w-4" aria-hidden="true" />
                   Export JSON
                 </button>
+                <button className="btn btn-secondary btn-sm" onClick={handleExportMarkdown}>
+                  <FileText className="h-4 w-4" aria-hidden="true" />
+                  Export Markdown
+                </button>
                 <button className="btn btn-secondary btn-sm" onClick={handleCopyResults}>
                   <Copy className="h-4 w-4" aria-hidden="true" />
-                  Copy
+                  Copy JSON
                 </button>
               </div>
             </div>
@@ -167,33 +215,19 @@ function ExecuteButton({ runId, isRunning }: { runId: string; isRunning: boolean
     }
   };
 
+  if (isRunning) {
+    return (
+      <button className="btn btn-primary" disabled>
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Running...
+      </button>
+    );
+  }
+
   return (
-    <button
-      className="btn btn-primary"
-      onClick={handleExecute}
-      disabled={executing || isRunning}
-    >
-      {executing ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Executing...
-        </>
-      ) : isRunning ? (
-        <>
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          Running...
-        </>
-      ) : runId.includes('failed') ? (
-        <>
-          <RotateCw className="h-4 w-4" aria-hidden="true" />
-          Re-run
-        </>
-      ) : (
-        <>
-          <Play className="h-4 w-4" aria-hidden="true" />
-          Execute
-        </>
-      )}
+    <button className="btn btn-primary" onClick={handleExecute} disabled={executing}>
+      <Play className="h-4 w-4" aria-hidden="true" />
+      Execute Audit
     </button>
   );
 }
@@ -203,11 +237,9 @@ function MetaCard({ label, value, icon: Icon }: { label: string; value: string; 
     <div className="card">
       <div className="card-body">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--color-primary-light)] text-[var(--color-primary)]">
-            <Icon className="h-5 w-5" aria-hidden="true" />
-          </div>
+          <Icon className="h-5 w-5 text-[var(--color-text-muted)]" aria-hidden="true" />
           <div>
-            <p className="text-sm text-[var(--color-text-muted)]">{label}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
             <p className="font-medium">{value}</p>
           </div>
         </div>
@@ -217,43 +249,25 @@ function MetaCard({ label, value, icon: Icon }: { label: string; value: string; 
 }
 
 function ResultsSummary({ results }: { results: AuditResults }) {
-  const gradeLabels: Record<'A' | 'B' | 'C' | 'D' | 'F', string> = {
-    A: 'Excellent \u2014 Agent meets high standards across all pillars',
-    B: 'Good \u2014 Minor issues detected, generally reliable',
-    C: 'Acceptable \u2014 Notable gaps in multiple areas',
-    D: 'Poor \u2014 Significant issues requiring attention',
-    F: 'Failing \u2014 Critical failures in mandatory minimums',
-  };
-
   return (
-    <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-      <div className="flex items-center gap-6">
-        <GradeBadge grade={results.grade} size="lg" />
-        <div>
-          <p className="text-2xl font-bold">{results.overall_score >= 0.85 ? 'PASS' : 'FAIL'}</p>
-          <p className="text-[var(--color-text-muted)]">{gradeLabels[results.grade]}</p>
-          {results.grade_capped && (
-            <p className="text-sm text-[var(--color-warning)] mt-1 flex items-center gap-1">
-              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-              Grade capped at 60% due to mandatory minimum failure
-            </p>
-          )}
-        </div>
+    <div className="grid grid-2 md:grid-4 gap-4">
+      <div className="stat-card">
+        <p className="stat-label">Overall Grade</p>
+        <GradeBadge grade={results.grade} size="xl" />
       </div>
-      <div className="text-right lg:text-left">
-        <p className="text-3xl font-bold tabular-nums">
-          {(results.overall_score * 100).toFixed(1)}%
+      <div className="stat-card">
+        <p className="stat-label">Overall Score</p>
+        <p className="stat-value">{results.overall_score.toLocaleString(undefined, { style: 'percent', minimumFractionDigits: 1 })}</p>
+      </div>
+      <div className="stat-card">
+        <p className="stat-label">Inspections</p>
+        <p className="stat-value">{results.inspections.length}</p>
+      </div>
+      <div className="stat-card">
+        <p className="stat-label">Mandatory Minimums</p>
+        <p className="stat-value">
+          {Object.values(results.mandatory_minimums).filter(Boolean).length} / {Object.keys(results.mandatory_minimums).length}
         </p>
-        <p className="text-sm text-[var(--color-text-muted)]">Overall Score</p>
-        <div className="mt-2 h-2 w-48 bg-[var(--color-border)] rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${results.overall_score * 100}%`,
-              background: results.overall_score >= 0.85 ? 'var(--color-success)' : 'var(--color-danger)',
-            }}
-          />
-        </div>
       </div>
     </div>
   );
@@ -261,40 +275,38 @@ function ResultsSummary({ results }: { results: AuditResults }) {
 
 function PillarScores({ pillars }: { pillars: PillarScore[] }) {
   return (
-    <div className="grid grid-2 lg:grid-5 gap-4">
+    <div className="space-y-3">
       {pillars.map((pillar) => (
-        <div key={pillar.name} className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium">{pillar.name}</h3>
-            <span className="text-sm font-mono tabular-nums">
-              {(pillar.score * 100).toFixed(0)}%
-            </span>
+        <div key={pillar.name} className="pillar-row">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-bg-tertiary)] flex items-center justify-center">
+                <span className="text-sm font-medium">{pillar.name.charAt(0)}</span>
+              </div>
+              <div>
+                <p className="font-medium">{pillar.name}</p>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {pillar.inspections_passed} / {pillar.inspections_total} passed
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 w-48">
+              <div className="flex-1 h-2 bg-[var(--color-bg-tertiary)] rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-primary)] transition-all duration-500"
+                  style={{ width: `${pillar.score * 100}%` }}
+                />
+              </div>
+              <span className="font-mono tabular-nums text-sm w-16 text-right">
+                {pillar.score.toLocaleString(undefined, { style: 'percent', minimumFractionDigits: 1 })}
+              </span>
+            </div>
           </div>
-          <div className="h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${pillar.score * 100}%`,
-                background: pillar.score >= 0.85 ? 'var(--color-success)' : pillar.score >= 0.6 ? 'var(--color-warning)' : 'var(--color-danger)',
-              }}
-            />
-          </div>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            {pillar.inspections_passed} / {pillar.inspections_total} passed \u2022 Weight: {(pillar.weight * 100).toFixed(0)}%
-          </p>
         </div>
       ))}
     </div>
   );
 }
-
-const handleExportResults = () => {
-  console.log('Export results');
-};
-
-const handleCopyResults = () => {
-  console.log('Copy results');
-};
 
 function InspectionsTable({
   inspections,
