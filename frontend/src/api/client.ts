@@ -158,6 +158,20 @@ class ApiClient {
     const response = await this.client.get<AuditResults>(`/audit-runs/${id}/results`);
     return response.data;
   }
+
+  async exportResultsJson(id: string): Promise<Blob> {
+    const response = await this.client.get(`/audit-runs/${id}/results/export/json`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  }
+
+  async exportResultsMarkdown(id: string): Promise<Blob> {
+    const response = await this.client.get(`/audit-runs/${id}/results/export/markdown`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  }
 }
 
 export const api = new ApiClient();
