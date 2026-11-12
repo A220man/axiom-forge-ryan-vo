@@ -28,13 +28,17 @@ Tests: `backend/tests/test_audit_engine.py`
 
 ### fixture-management — Fixture CRUD and validation
 
-Status: planned
+Status: in_progress
 
 Acceptance:
 - Create, list, update, delete fixtures via API
 - Fixture schema validation (YAML/JSON)
 - Fixture versioning and import/export
 - UI for fixture editor with validation feedback
+
+Implementation: `backend/app/api/routes_fixture.py:84-136`, `frontend/src/components/FixturesPage.tsx`, `frontend/src/components/FixtureDetail.tsx`
+
+Tests: `backend/tests/test_fixture_api.py`, `frontend/tests/fixtures.test.ts`
 
 ### results-dashboard — Audit results dashboard with scoring breakdown
 
@@ -44,7 +48,7 @@ Acceptance:
 - Pillar scores (Fabrication, Manipulation, Deception, Unpredictability, Opacity)
 - Inspection-level detail with pass/fail/partial
 - Mandatory minimum indicators (B01, B08, P01)
-- Grade calculation (A-F) with weighted average
+- Grade calculation (A-F) with weighted average)
 - Export results as JSON/Markdown
 
 ### auth-oidc — OIDC/Keycloak authentication with roles

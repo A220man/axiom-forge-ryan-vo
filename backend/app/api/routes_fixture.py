@@ -124,7 +124,7 @@ async def update_fixture(
     return FixtureResponse.model_validate(fixture)
 
 
-@router.delete("/{fixture_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{fixture_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 async def delete_fixture(
     fixture_id: str,
     session: AsyncSession = Depends(get_db_session),
