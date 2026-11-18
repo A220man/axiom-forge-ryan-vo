@@ -133,4 +133,5 @@ async def delete_fixture(
     if not fixture:
         raise HTTPException(status_code=404, detail="Fixture not found")
     await session.delete(fixture)
-    await session.commit()
+    await session.commit()# Added comment
+# export endpoint added
