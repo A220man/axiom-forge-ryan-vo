@@ -15,6 +15,50 @@ from app.schemas import (
     ErrorResponse,
 )
 
+import json
+import yaml
+
+
+def _parse_fixture_content(raw_content) -> dict:
+    """Parse fixture content, accepting both JSON and YAML formats.
+
+    Tries JSON first, then YAML. Raises HTTPException if neither works
+    or required keys are missing.
+    """
+    if raw_content is None:
+        return None
+
+    if isinstance(raw_content, dict):
+        return raw_content
+
+    if isinstance(raw_content, str):
+        # Try JSON first
+        try:
+            parsed = json.loads(raw_content)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Try YAML
+        try:
+            parsed = yaml.safe_load(raw_content)
+            if isinstance(parsed, dict):
+                return parsed
+        except (yaml.YAMLError, ValueError):
+            pass
+
+        raise HTTPException(
+            status_code=400,
+            detail="Fixture content must be a JSON or YAML object with metadata and tests keys",
+        )
+
+    raise HTTPException(
+        status_code=400,
+        detail="Fixture content must be a JSON or YAML object",
+    )
+
+
 router = APIRouter(prefix="/fixtures", tags=["fixtures"])
 
 
@@ -47,11 +91,13 @@ async def create_fixture(
     fixture_data: FixtureCreate,
     session: AsyncSession = Depends(get_db_session),
 ):
-    # Validate fixture content structure
-    if not isinstance(fixture_data.content, dict):
-        raise HTTPException(status_code=400, detail="Fixture content must be a JSON object")
+    # Parse and validate fixture content structure (accepts JSON or YAML)
+    content = _parse_fixture_content(fixture_data.content)
+    if not isinstance(content, dict):
+        raise HTTPException(status_code=400, detail="Fixture content must be a JSON or YAML object")
+
     required_keys = {"metadata", "tests"}
-    if not required_keys.issubset(fixture_data.content.keys()):
+    if not required_keys.issubset(content.keys()):
         raise HTTPException(
             status_code=400,
             detail=f"Fixture content must contain keys: {required_keys}",
@@ -60,7 +106,7 @@ async def create_fixture(
     fixture = Fixture(
         name=fixture_data.name,
         description=fixture_data.description,
-        content=fixture_data.content,
+        content=content,
         schema_version=fixture_data.schema_version,
     )
     session.add(fixture)
@@ -98,15 +144,16 @@ async def update_fixture(
         fixture.description = fixture_data.description
         updated = True
     if fixture_data.content is not None:
-        if not isinstance(fixture_data.content, dict):
-            raise HTTPException(status_code=400, detail="Fixture content must be a JSON object")
+        content = _parse_fixture_content(fixture_data.content)
+        if not isinstance(content, dict):
+            raise HTTPException(status_code=400, detail="Fixture content must be a JSON or YAML object")
         required_keys = {"metadata", "tests"}
-        if not required_keys.issubset(fixture_data.content.keys()):
+        if not required_keys.issubset(content.keys()):
             raise HTTPException(
                 status_code=400,
                 detail=f"Fixture content must contain keys: {required_keys}",
             )
-        fixture.content = fixture_data.content
+        fixture.content = content
         updated = True
     if fixture_data.schema_version is not None:
         fixture.schema_version = fixture_data.schema_version
@@ -133,5 +180,4 @@ async def delete_fixture(
     if not fixture:
         raise HTTPException(status_code=404, detail="Fixture not found")
     await session.delete(fixture)
-    await session.commit()# Added comment
-# export endpoint added
+    await session.commit()
