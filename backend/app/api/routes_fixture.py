@@ -134,3 +134,13 @@ async def delete_fixture(
         raise HTTPException(status_code=404, detail="Fixture not found")
     await session.delete(fixture)
     await session.commit()
+@router.get("/{fixture_id}/export", response_model=FixtureResponse)
+async def export_fixture(
+    fixture_id: str,
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Export fixture data as JSON for download."""
+    fixture = await session.get(Fixture, fixture_id)
+    if not fixture:
+        raise HTTPException(status_code=404, detail="Fixture not found")
+    return FixtureResponse.model_validate(fixture)
